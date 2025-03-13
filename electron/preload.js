@@ -5,6 +5,9 @@ const {
 
 contextBridge.exposeInMainWorld('electron', {
     // getData: (page, pageSize) => ipcRenderer.invoke("get-data", page, pageSize),
-    getUsers: () => ipcRenderer.invoke("list-users"),
-    createUser: (firstname, email) => ipcRenderer.invoke("create-user", firstname, email),
+    getUsers: (token) => ipcRenderer.invoke("list-users", token),
+    createUser: (firstname, email) => ipcRenderer.invoke("create-user", firstname, email),    
+    login: (data) => ipcRenderer.invoke("login", data),
+    verifyToken: (token) => ipcRenderer.invoke("verifyToken", token),
+
 });
