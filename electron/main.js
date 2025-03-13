@@ -4,7 +4,7 @@ const {
   BrowserWindow,
   ipcMain
 } = require("electron");
-
+require('dotenv').config(); 
 const sequelize = require("./database");
 const User = require('./models/user.js');
 
