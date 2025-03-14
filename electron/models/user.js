@@ -1,25 +1,35 @@
-const {
-    DataTypes
-} = require('sequelize')
-const sequelize = require('../database')
-
-const Role = sequelize.define('role', {
-    id: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
-        primaryKey: true,
-        allowNull: false,
-    },
-    name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        unique: true,
-    },
-}, {
-    tableName: 'roles',
-    timestamps: false,
-    underscored: true,
-});
+// const {
+//     DataTypes
+// } = require('sequelize')
+// const sequelize = require('../database');
+// const User = sequelize.define('user', {
+//     id: {
+//         type: DataTypes.INTEGER,
+//         autoIncrement: true,
+//         primaryKey: true,
+//         allowNull: false,
+//     },
+//     firstname: {
+//         type: DataTypes.STRING,
+//         allowNull: false
+//     },
+//     email: {
+//         type: DataTypes.STRING,
+//         allowNull: false
+//     },
+//     password: {
+//         type: DataTypes.STRING,
+//         allowNull: true,
+//     },
+// }, {
+//     tableName: 'users',
+//     timestamps: true,
+//     underscored: true,
+//     createdAt: true,
+//     updatedAt: true,
+// })
+const { DataTypes } = require('sequelize');
+const sequelize = require('../database');
 
 const User = sequelize.define('user', {
     id: {
@@ -30,25 +40,26 @@ const User = sequelize.define('user', {
     },
     firstname: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
     },
     email: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
     },
     password: {
         type: DataTypes.STRING,
         allowNull: true,
     },
+    role_id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+    },
 }, {
     tableName: 'users',
     timestamps: true,
     underscored: true,
-    createdAt: true,
-    updatedAt: true,
-})
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+});
 
-User.belongsTo(Role, { foreignKey: 'role_id', as: 'role' });
-Role.hasMany(User, { foreignKey: 'role_id', as: 'users' });
-
-module.exports = {User, Role};
+module.exports = User;

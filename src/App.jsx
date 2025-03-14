@@ -4,27 +4,41 @@ function App() {
   const [users, setUsers] = useState([]);
   const [firstname, setFirstname] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("");
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userInfo, setUserInfo] = useState(null); // Guardar info del usuario logeado
 
   useEffect(() => {
     if (token) {
-      window.electron.getUsers({ token }).then((response) => {
-        console.log(response);
+      window.electron.verifyToken({ token }).then((response) => {
         if (response.success) {
-          setUsers(response.users);
+          setUserInfo(response.user);
+          setIsAuthenticated(true);
+          if (response.user.role === "ADMIN") {
+            window.electron.getUsers({ token }).then((userResponse) => {
+              console.log(userResponse.users)
+              if (userResponse.success) {
+                setUsers(userResponse.users);
+              }
+            });
+          }
+        } else {
+          setIsAuthenticated(false);
+          setToken(null);
+          localStorage.removeItem("token");
         }
       });
     }
-  }, [role, role]);
+  }, [token]);
 
   const handleCreateUser = () => {
     if (!firstname || !email) return;
-    window.electron.createUser(token, firstname, email).then((newUser) => {
-      setUsers([...users, newUser]);
+    window.electron.createUser({ token, firstname, email }).then((response) => {
+      if(response.success){
+        setUsers([...users, response.user]);
+      }
       setFirstname("");
       setEmail("");
     });
@@ -32,18 +46,25 @@ function App() {
 
   const handleLogin = () => {
     window.electron.login({ email: username, password }).then((response) => {
-      console.log(response);
-      if (response.success) {
+      if (response.success && response.code == 200) {        
         localStorage.setItem("token", response.token);
         setToken(response.token);
-        setRole(response.role);
-        setIsAuthenticated(true);
+        setUserInfo(response.user);        
+        setIsAuthenticated(true);   
       } else {
-        console.log("Credenciales incorrectas");
         setIsAuthenticated(false);
-        setToken("");
+        setToken(null);
+        localStorage.removeItem("token");
       }
     });
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    setToken(null);
+    setUserInfo(null);
+    setIsAuthenticated(false);
+    setUsers([]);
   };
 
   if (!isAuthenticated) {
@@ -52,7 +73,7 @@ function App() {
         <h1>Iniciar Sesión</h1>
         <input
           type="text"
-          placeholder="Usuario"
+          placeholder="Email"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
         />
@@ -69,16 +90,22 @@ function App() {
 
   return (
     <div>
-      <h1>Usuarios</h1>
-      <ul>
-        {users.map((user) => (
-          <li key={user.id}>
-            {user.firstname} - {user.email}
-          </li>
-        ))}
-      </ul>
-      {role == "ADMIN" ? (
-        <div>
+      <h1>Bienvenido: {userInfo?.firstname}</h1>
+      <p>Email: {userInfo?.email}</p>
+      <p>Rol: {userInfo?.role}</p>
+      <button onClick={handleLogout}>Cerrar Sesión</button>
+
+      {userInfo?.role === "ADMIN" ? (
+        <>
+          <h1>Usuarios</h1>
+          <ul>
+            {users.map((user) => (
+              <li key={user.id}>
+                {user.firstname} - {user.email}
+              </li>
+            ))}
+          </ul>
+
           <h2>Crear Usuario</h2>
           <input
             type="text"
@@ -93,9 +120,9 @@ function App() {
             onChange={(e) => setEmail(e.target.value)}
           />
           <button onClick={handleCreateUser}>Crear</button>
-        </div>
+        </>
       ) : (
-        <h2>No tienes permisos</h2>
+        <h2>No tienes permisos para ver la lista de usuarios</h2>
       )}
     </div>
   );

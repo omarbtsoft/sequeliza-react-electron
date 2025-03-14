@@ -5,14 +5,18 @@ const {
   ipcMain
 } = require("electron");
 require('dotenv').config();
+const bcrypt = require("bcryptjs")
 const sequelize = require("./database");
+const { isAdmin, getUser } = require("./middlewares/auth.js");
 const {
   User,
   Role
-} = require('./models/user.js');
+} = require('./models');
+
 const jwt = require("jsonwebtoken");
 const isDev = process.env.IS_DEV == "true" ? true : false;
-const SECRET_KEY = "clave_super_secreta";
+
+const SECRET_KEY = process.env.JWT_SECRET_KEY || "clave_super_secreta";
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
@@ -30,74 +34,59 @@ function createWindow() {
 
   mainWindow.loadURL(
     isDev ?
-    "http://localhost:3000" :
-    `file://${path.join(__dirname, "../dist/index.html")}`
+      "http://localhost:3000" :
+      `file://${path.join(__dirname, "../dist/index.html")}`
   );
   ipcMain.handle('list-users', async (event, {
     token
   }) => {
     try {
-      const decoded = jwt.verify(token, SECRET_KEY);
-      const email = decoded.email;
-      const user = await User.findOne({
-        where: {
-          email
-        },
-        include: {
-          model: Role, 
-          as: "role", 
-          attributes: ["name"] 
-        },
-        raw: true
-      });
-
-      console.log(" Rol del usuario "+user['role.name']);
-
-      // console.log('Esto es nombre del rol : '+user.role.name);
-      // Verificar si el usuario existe y si tiene el rol de ADMIN
-      if (!user || user['role.name'] != "ADMIN") {
-        return {
-          success: false,
-          message: "No autorizado"
-        };
-      }
-
-      // Obtener el listado de usuarios si la verificación es exitosa
+      const auth = await isAdmin(token);
+      if (!auth.success) return auth;
       const users = await User.findAll({
         raw: true
       });
-
-      console.log("Lista de usuarios");
-      console.log(users);
-
       return {
         users,
-        success: true
+        success: true,
+        code: 201
       };
     } catch (error) {
       console.error("Error al obtener datos:", error);
-      return {        
-        success: false
+      return {
+        success: false,
+        code: 500
       };;
     }
   });
 
-  ipcMain.handle('create-user', async (event, firstname, email) => {
+  ipcMain.handle('create-user', async (event, { firstname, email, token }) => {
     try {
+      const auth = await isAdmin(token);
+      if (!auth.success) return auth;
+      const hashedPassword = await bcrypt.hash("123", 3);
       const user = await User.create({
         firstname: firstname,
-        email: email
+        email: email,
+        role_id: 1, 
+        password: hashedPassword
       });
       await user.save();
-      console.log(user.dataValues);
-      return user.dataValues;
+
+      return {
+        user: user.dataValues,
+        success: true,
+        code: 201
+      };
     } catch (error) {
       console.error("Error en crear un usuario: ", error);
-      return null;
+      return {
+        success: false,
+        code: 500
+      };
     }
   });
 
-  // Iniciar sesión y generar JWT
   ipcMain.handle("login", async (event, {
     email,
     password
@@ -112,60 +101,62 @@ function createWindow() {
         attributes: ["name"]
       }
     });
-    if(!user){
+    if (!user) {
       return {
-        success: false,        
-        message: "Credenciales incorrectas"
+        success: true,
+        message: "Credenciales incorrectas",
+        code: 404
       };
     }
-    // const result = {
-    //   user: user.dataValues,
-    //   role: user.role ? user.role.name : null,
-    // };
-    
+    if(user.password){
+      const passwordMatch = await bcrypt.compare(password, user.password);
+      if (!passwordMatch) {
+          return { success: true, message: "Credenciales incorrectas", code: 401 };
+      }
+    }
     const token = jwt.sign({
       id: user.id,
       email: user.email
     }, SECRET_KEY, {
       expiresIn: "1h"
     });
-
-    const result = {
-      success: true,
-      token, 
-      role:user.role ? user.role.name : null
-    }
-    console.log("Esto es login");
-    // console.log(result)
+    console.log(user.dataValues);
+    console.log(user.role ? user.role.name : null);
     return {
       success: true,
-      token, 
-      role:user.role ? user.role.name : null
+      token,
+      user: {
+        ...user.dataValues,
+        role: user.role ? user.role.name : null
+      },
+      code:200
     };
   });
 
-  // Verificar JWT
-  ipcMain.handle("verifyToken", async (event, token) => {
+
+  ipcMain.handle("verifyToken", async (event, { token }) => {
     try {
-      const decoded = jwt.verify(token, SECRET_KEY);
+      const response = await getUser(token);
+      if (!response.user) {
+        return { success: false, message: "Usuario no encontrado", code: 404 };
+      }
       return {
         success: true,
-        decoded
+        user: { ...response.user },
+        code: 201
       };
     } catch {
-      return {
-        success: false,
-        message: "Token inválido o expirado"
-      };
+      return { success: false, message: "Token inválido o expirado", code: 401 };
     }
   });
 }
 
 app.whenReady().then(async () => {
   createWindow();
-  await sequelize.sync({
-    alter: true
-  });
+  // await sequelize.sync({
+  //   alter: true
+  // });
+  await sequelize.sync();
   console.log(" => " + process.env.OMAR);
   app.on("activate", function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
